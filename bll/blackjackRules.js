@@ -2,15 +2,9 @@
 const yaml = require("js-yaml");
 const fs = require("fs");
 const MultiShuffle = require("../shuffle");
+const { pid } = require("process");
 
 const blackjackRules = () => {};
-
-const setSoft = (n) => {
-	//messy - look at all cards in the playerHand - how to deal with multi-aces?
-	return 11;
-}
-
-// const oneOrEleven = n => isNaN(n) ? setSoft(n) : n
 const isNanOrZero = n => isNaN(n) ? 0 : n
 
 try {
@@ -19,20 +13,51 @@ try {
 	// Deck Shuffle
 	const deck = MultiShuffle();
 
-	// Hands
-	const card1 = { cardValue: 2 };
-	const card2 = { cardValue: 2};
-	const card3 = { cardValue: 5 };
 
-	let playerHand = [ deck.pop(),  deck.pop()];
-	let dealerHand = [ deck.pop(), deck.pop()];
+	let playerCards = [ deck.pop(), deck.pop()];
+	let dealerCards = [ deck.pop(), deck.pop()];
 
-	const FirstPlay = (playerHand, dealerCard) => {
-		const cardTally = playerHand.map(item => item.cardValue).reduce((a, b) => isNanOrZero(a) + isNanOrZero(b));
+	// const supervariable = n => n == 10 ? n : (n--, console.log(n), supervariable(n))
 
-		if (playerHand.length == 2) {
-			playerHand.sort(function(a,b){ return ((+b.cardValue==b.cardValue) && (+a.cardValue != a.cardValue)) || (a.cardValue - b.cardValue) }).reverse();
-			const handCode = playerHand[0].cardValue + "," + playerHand[1].cardValue;
+	const aceCheck = (hand) => {
+		let aces = hand.filter(function (cards) { return cards.cardFace == 'Ace'});
+		let noAces = hand.filter(function (cards) { return cards.cardFace != 'Ace'});
+		let result = noAces.map(item => item.cardValue).reduce((a, b) => a + b);
+
+		if (aces.length > 0) {
+			aces.forEach(card => {
+				card.cardValue = 1;
+				result += 1;
+				if((result + 11) <= 21) {
+					card.cardValue += 10;
+					result += 10;
+				}
+			});
+		}
+	}
+
+	const dealerRun = (dealerCards) => {
+		const hand = {
+			hand: dealerCards,
+			result: 0
+		}
+		aceCheck(dealerCards);
+		hand.result = dealerCards.map(item => item.cardValue).reduce((a, b) => a + b);
+
+		if (hand.result > 21) return dealerCards;
+		if (hand.result < 17) {
+			dealerCards.push(deck.pop());
+			dealerRun(dealerCards);
+		}
+		return hand;
+	}
+
+	const FirstPlay = (playerCards, dealerCard) => {
+		const cardTally = playerCards.map(item => item.cardValue).reduce((a, b) => isNanOrZero(a) + isNanOrZero(b));
+
+		if (playerCards.length == 2) {
+			playerCards.sort(function(a,b){ return ((+b.cardValue==b.cardValue) && (+a.cardValue != a.cardValue)) || (a.cardValue - b.cardValue) }).reverse();
+			const handCode = playerCards[0].cardValue + "," + playerCards[1].cardValue;
 			console.log("handCode : " + handCode);
 			console.log("dealerCard : " + dealerCard);
 
@@ -40,7 +65,7 @@ try {
 			if(handCode == 'A,10') {console.log("BLACKJACK!!");}
 
 			//Eval the handcode to see the options (all options will have an array)
-			let hitOption = rules.filter(function (cards) { return cards.Hand.PlayerTotal == (handCode.includes('A') || (playerHand[0].cardValue == playerHand[1].cardValue) ? handCode : cardTally); });
+			let hitOption = rules.filter(function (cards) { return cards.Hand.PlayerTotal == (handCode.includes('A') || (playerCards[0].cardValue == playerCards[1].cardValue) ? handCode : cardTally); });
 
 			//2. hit,split or double?
 			const shouldDouble = hitOption[0].Hand.Double.indexOf(dealerCard);
@@ -59,20 +84,80 @@ try {
 		}
 	}
 
-	const AutoRunOut = (playerHand, dealerCard) => {
+	const AutoRunOut = (playerCards, dealerCard) => {
 		console.log("dealerCard: " + dealerCard);
-		// console.log(playerHand);
-		playerHand.forEach(element => {
-			console.log(element.cardValue);
-		});
+		aceCheck(playerCards);
+		const cardTally = playerCards.map(item => item.cardValue).reduce((a, b) => isNanOrZero(a) + isNanOrZero(b));
+		console.log("Card Tally: " + cardTally);
+		if (cardTally > 21) { console.log("Bust."); return; }
 
-		const cardTally = playerHand.map(item => item.cardValue).reduce((a, b) => isNanOrZero(a) + isNanOrZero(b));
-		console.log("cardTally: " + cardTally);
+		//check for ace
+
+		//if soft 7 or less
+
+		//if soft 8 - eval against dealer card
+
+		//if soft 9 or higher, stand
+
+		let hitOption = rules.filter(function (cards) { return cards.Hand.PlayerTotal == cardTally});
+		const shouldHit = hitOption[0].Hand.Hit.indexOf(dealerCard);
+
+		// const supervariable = n => n == 10 ? n : (n--, console.log(n), supervariable(n))
+
+		if (shouldHit >= 0) {
+			console.log("Action: Hit");
+			playerCards.push(deck.pop());
+			AutoRunOut(playerCards, dealerCard);
+		 }
+		return playerCards;
 	};
 
-	//Play(playerHand, dealerHand[0].cardValue);
-	FirstPlay(playerHand, dealerHand[0].cardValue);
 
+
+	const aceTest = () => {
+		let card1 = {
+			id: 2,
+			suit: "Hearts",
+			cardFace: "Ace",
+			cardValue: "A"
+		}
+		let card2 = {
+			id: 12,
+			suit: "Spades",
+			cardFace: "Three",
+			cardValue: 3
+		}
+		let card3 = {
+			id: 24,
+			suit: "Hearts",
+			cardFace: "Two",
+			cardValue: 2
+		}
+		let card4 = {
+			id: 22,
+			suit: "Hearts",
+			cardFace: "Ace",
+			cardValue: "A"
+		}
+		let card5 = {
+			id: 92,
+			suit: "Clubs",
+			cardFace: "Ace",
+			cardValue: "A"
+		}
+
+		var p1 = [];
+		p1.push(deck.pop(), deck.pop());
+		// p1.push(card1, card2, card3, card4);
+
+
+	}
+
+	aceTest();
+	// const gg = AutoRunOut(playerHand, dealerHand[0].cardValue);
+	//const gg = dealerRun(dealerHand);
+	// console.log(gg);
+	//FirstPlay(playerHand, dealerHand[0].cardValue);
 
 } catch (e) {
 	console.log(e);
