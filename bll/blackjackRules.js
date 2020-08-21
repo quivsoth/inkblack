@@ -4,10 +4,6 @@ const fs = require("fs");
 const MultiShuffle = require("../shuffle");
 
 const blackjackRules = () => {
-	const rules = yaml.safeLoad(fs.readFileSync("bll/blackjackRules.yml", "utf8"));
-	const deck = MultiShuffle();
-	const isNanOrZero = n => isNaN(n) ? 0 : n
-	const tally = (cards) => { return cards.map(item => item.cardValue).reduce((a, b) => a + b); }
 	const aceCheck = (hand) => {
 		let hasAce = false;
 		let aces = hand.filter(function (cards) { return cards.cardFace == 'Ace'});
@@ -27,13 +23,16 @@ const blackjackRules = () => {
 		}
 		return hasAce;
 	}
+	const deck = MultiShuffle();
+	const isNanOrZero = n => isNaN(n) ? 0 : n
+	const rules = yaml.safeLoad(fs.readFileSync("bll/blackjackRules.yml", "utf8"));
+	const tally = (cards) => { return cards.map(item => item.cardValue).reduce((a, b) => a + b); }
+
 
 	const RunPlayer = (playingHand, dealerCard) => {
 		let cardTally = tally(playingHand.cards[0]);
 		const sorted = playingHand.cards[0].sort(function(a,b){ return ((+b.cardValue==b.cardValue) && (+a.cardValue != a.cardValue)) || (a.cardValue - b.cardValue) }).reverse();
 		const handCode = sorted[0].cardValue + "," + sorted[1].cardValue;
-
-
 
 		// Check for blackjack
 		if(handCode == 'A,10') {
@@ -112,25 +111,23 @@ const blackjackRules = () => {
 	};
 
 	const RunDeck = (player, dealer) => {
+		let outcome = "";		// push, dealerwin, playerwin (WLP)
 
-		// push, dealerwin, playerwin (WLP)
+		console.log(dealer[0][0].cardFace);
 
 		// Eval
-		const playerResult = RunPlayer(Table.players[0].hand, Table.dealer[0][0].cardValue);
+		let playerResult = RunPlayer(Table.players[0].hand, Table.dealer[0][0].cardValue);
 		let dealerResult = null;
 		if(playerResult.outcome == "BJ") {
-		//TODO check against the dealer hand, if no blackjack you win
-		} else if(playerResult.outcome == "BUST") {
-		//TODO you lose, dealer doesn't need to do anything
-		}
-		else {
-			dealerResult = RunDealer(Table.dealer[0], false);
-		}
-		console.log(playerResult);
-		console.log(dealerResult);
+			//TODO check against the dealer hand, if no blackjack you win
+			outcome = "W";
+		} else if(playerResult.outcome == "BUST") outcome = "L";
+		else dealerResult = RunDealer(Table.dealer[0], false);
+
+		// console.log(playerResult);
+		// console.log(dealerResult);
 
 		// TODO clear out the hand arrays, the outcome + any bets
-
 		//TODO result builder
 	}
 
@@ -141,27 +138,18 @@ const blackjackRules = () => {
 		var Table = { players: [], shoeResult: [], dealer: [] }
 		var player1 = { name: "Ximeng Liu", cash: 0, hand: { cards: [], outcome: "", bet: 0} }
 
-		// Add player to the table
-		Table.players.push(player1);
-
-		// Deal first hand to the player
-		player1.hand.cards.push(playerCards);
-
-		// Deal to the dealer
-		Table.dealer.push(dealerCards);
-
-		//review the outcome
-		RunDeck(Table.players[0], Table.dealer);
-
-
-
+		Table.players.push(player1);				// Add player to the table
+		player1.hand.cards.push(playerCards);		// Deal first hand to the player
+		Table.dealer.push(dealerCards);				// Deal to the dealer
+		RunDeck(Table.players[0], Table.dealer);	//review the outcome
 		//*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-
 	} catch (e) {
 		console.log(e);
 	}
 }
 blackjackRules();
 module.exports = blackjackRules;
+
+
 // bugs
 // A/7 didnt hit?
