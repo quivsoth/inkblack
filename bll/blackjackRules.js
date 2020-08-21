@@ -28,16 +28,18 @@ const blackjackRules = () => {
 		return hasAce;
 	}
 
-	const RunPlayer = (playingCards, dealerCard) => {
-		const cardTally = tally(playingCards);
-		const sorted = playingCards.sort(function(a,b){ return ((+b.cardValue==b.cardValue) && (+a.cardValue != a.cardValue)) || (a.cardValue - b.cardValue) }).reverse();
+	const RunPlayer = (playingHand, dealerCard) => {
+		let cardTally = tally(playingHand.cards[0]);
+		const sorted = playingHand.cards[0].sort(function(a,b){ return ((+b.cardValue==b.cardValue) && (+a.cardValue != a.cardValue)) || (a.cardValue - b.cardValue) }).reverse();
 		const handCode = sorted[0].cardValue + "," + sorted[1].cardValue;
 
-		// Check for blackjack
-		if (cardTally > 21) { return playingCards; }
+
 
 		// Check for blackjack
-		if(handCode == 'A,10') { return playingCards; }
+		if(handCode == 'A,10') {
+			playingHand.outcome = "BJ";
+			return playingHand;
+		}
 
 		//Eval the handcode to see the options (all options will have an array)
 		let hitOption = rules.filter(function (cards) { return cards.Hand.PlayerTotal == (handCode.includes('A') || (sorted[0].cardValue == sorted[1].cardValue) ? handCode : cardTally); });
@@ -45,23 +47,29 @@ const blackjackRules = () => {
 		//2. hit,split or double?
 		const shouldDouble = hitOption[0].Hand.Double.indexOf(dealerCard);
 		if (shouldDouble >= 0) {
-			console.log("Action: DOUBLE");
-			playingCards.push(deck.pop());
-			return playingCards;
+			playingHand.outcome = "DOUBLE";
+			playingHand.cards[0].push(deck.pop());
+			return playingHand;
 		}
 
 		const shouldSplit = hitOption[0].Hand.Split.indexOf(dealerCard);
 		if (shouldSplit >= 0) {
-			console.log("Action: SPLIT");
-			return playingCards;
+			playingHand.outcome = "SPLIT";
+			return playingHand;
 		}
 
 		const shouldHit = hitOption[0].Hand.Hit.indexOf(dealerCard);
-		if (shouldHit >= 0) {
-			console.log("Action: HIT");
-			AutoRun(sorted, dealerCard);
+		if (shouldHit >= 0) AutoRun(sorted, dealerCard);
+
+		cardTally = tally(playingHand.cards[0]);
+		// BUST
+		if (cardTally > 21) {
+			playingHand.outcome = "BUST";
+			return playingHand;
 		}
-		return playingCards;
+
+		playingHand.outcome = tally(playingHand.cards[0]);
+		return playingHand;
 	}
 
 	const RunDealer = (dealerCards, soft17) => {
@@ -71,12 +79,14 @@ const blackjackRules = () => {
 			dealerCards.push(deck.pop());
 			RunDealer(dealerCards);
 		}
+
 		return dealerCards;
 	}
 
 	const AutoRun = (cards, dealerCard) => {
 		const hasAce = aceCheck(cards);
 		const cardTally = tally(cards);
+
 		if (cardTally > 21) { return cards; }
 
 		//if soft 7 or less
@@ -101,14 +111,27 @@ const blackjackRules = () => {
 		return cards;
 	};
 
-	const WhoWon = (playerHand, dealerHand) => {
+	const RunDeck = (player, dealer) => {
 
-		//
-		const playerTotal = tally(playerHand);
-		const dealerTotal = tally(dealerHand);
-		var result = { }
-		console.log(playerHand);
-		console.log(dealerHand);
+		// push, dealerwin, playerwin (WLP)
+
+		// Eval
+		const playerResult = RunPlayer(Table.players[0].hand, Table.dealer[0][0].cardValue);
+		let dealerResult = null;
+		if(playerResult.outcome == "BJ") {
+		//TODO check against the dealer hand, if no blackjack you win
+		} else if(playerResult.outcome == "BUST") {
+		//TODO you lose, dealer doesn't need to do anything
+		}
+		else {
+			dealerResult = RunDealer(Table.dealer[0], false);
+		}
+		console.log(playerResult);
+		console.log(dealerResult);
+
+		// TODO clear out the hand arrays, the outcome + any bets
+
+		//TODO result builder
 	}
 
 	try {
@@ -116,63 +139,29 @@ const blackjackRules = () => {
 		var playerCards = [ deck.pop(), deck.pop()];
 		var dealerCards = [ deck.pop(), deck.pop()];
 		var Table = { players: [], shoeResult: [], dealer: [] }
-		var player1 = { name: "Ximeng Liu", money: 0, hand: [] }
+		var player1 = { name: "Ximeng Liu", cash: 0, hand: { cards: [], outcome: "", bet: 0} }
 
 		// Add player to the table
 		Table.players.push(player1);
 
 		// Deal first hand to the player
-		player1.hand.push(playerCards);
+		player1.hand.cards.push(playerCards);
 
 		// Deal to the dealer
 		Table.dealer.push(dealerCards);
 
-		// Eval
-		const playerResult = RunPlayer(Table.players[0].hand[0], Table.dealer[0][0].cardValue);
-		const dealerResult = RunDealer(Table.dealer[0], false);
-		let playerTally = tally(playerResult);
-		let dealerTally = tally(dealerResult);
-
-		console.log("player: " + playerTally);
-		console.log("dealer: " + dealerTally);
-
-		console.log("----");
-
-		if(playerTally > 21) console.log("bust");
-		if(playerTally == 21 && playerResult.length == 2) console.log("blackjack");
-
-		// console.log();
+		//review the outcome
+		RunDeck(Table.players[0], Table.dealer);
 
 
-		console.log("--");
-		// console.log(dealerResult);
-		// console.log(runOutPlayer);
-		// const runOutDealer = RunDealer(Table.dealer[0], true);
-		// console.log(runOutDealer);
 
-		//const result = { tally: 0, isDouble: false, hand: [] }
-		// console.log(runOutDealer);
-
-		// console.log(result.tally);
-		// console.log(result.hand);
 		//*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 
 	} catch (e) {
 		console.log(e);
 	}
 }
-
-
-
-
-
-
 blackjackRules();
 module.exports = blackjackRules;
-
-
-
-
-
 // bugs
 // A/7 didnt hit?
