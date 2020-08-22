@@ -5,29 +5,87 @@ const MultiShuffle = require("../shuffle");
 
 const blackjackRules = () => {
 	const aceCheck = (hand) => {
-		let hasAce = false;
-		let aces = hand.filter(function (cards) { return cards.cardFace == 'Ace'});
-		let noAces = hand.filter(function (cards) { return cards.cardFace != 'Ace'});
-		let result = noAces.map(item => item.cardValue).reduce((a, b) => a + b);
-
-		if (aces.length > 0) {
-			hasAce = true;
-			aces.forEach(card => {
-				card.cardValue = 1;
-				result += 1;
-				if((result + 10) <= 21) {
-					card.cardValue += 10;
-					result += 10;
-				}
-			});
+		try {
+			let hasAce = false;
+			let aces = hand.filter(function (cards) { return cards.cardFace == 'Ace'});
+			let noAces = hand.filter(function (cards) { return cards.cardFace != 'Ace'});
+			let result = 0;
+			noAces.length == 0 && aces.length == 2 ? result = 2 : result = noAces.map(item => item.cardValue).reduce((a, b) => a + b);
+			if (aces.length > 0) {
+				hasAce = true;
+				aces.forEach(card => {
+					card.cardValue = 1;
+					result += 1;
+					if((result + 10) <= 21) {
+						card.cardValue += 10;
+						result += 10;
+					}
+				});
+			}
+			return hasAce;
+		} catch (e) {
+			console.log(e);
 		}
-		return hasAce;
 	}
 	const deck = MultiShuffle();
 	const isNanOrZero = n => isNaN(n) ? 0 : n
 	const rules = yaml.safeLoad(fs.readFileSync("bll/blackjackRules.yml", "utf8"));
 	const tally = (cards) => { return cards.map(item => item.cardValue).reduce((a, b) => a + b); }
 
+	const AutoRun = (cards, dealerCard) => {
+		const hasAce = aceCheck(cards);
+		const cardTally = tally(cards);
+		if (cardTally > 21) { return cards; }
+
+		//if soft 7 or less
+		if(hasAce && cardTally <=7 ) {
+			cards.push(deck.pop());
+			AutoRun(cards, dealerCard);
+		}
+
+		//if soft 8 - eval against dealer card
+		if(hasAce && cardTally == 8 ) //todo this will depend on the face card the dealer has
+
+		//if soft 9 or higher, stand
+		if(hasAce && cardTally >= 9 ) return cards;
+
+		let hitOption = rules.filter(function (cards) { return cards.Hand.PlayerTotal == cardTally});
+		const shouldHit = hitOption[0].Hand.Hit.indexOf(dealerCard);
+		if (shouldHit >= 0) {
+			cards.push(deck.pop());
+			AutoRun(cards, dealerCard);
+		}
+		return cards;
+	};
+
+	const Play = (table) => {
+		if(deck.length < 50) return;
+		table.dealer.hand.cards = [];
+		table.dealer.hand.outcome = "";
+		table.dealer.hand.cards.push([deck.pop(), deck.pop()]);
+		//TODO deal cards properly between players
+		table.players.forEach(player => {
+			player.hand.cards = [];
+			player.hand.outcome = "";
+			player.hand.cards.push([deck.pop(), deck.pop()]);
+		});
+		var dealOutcome = RunTheDeck(table.players[0], table.dealer);	//review the outcome
+		// TODO result builder
+
+		resultBuilder.push({outcome: dealOutcome, playerHand: table.players[0].hand.cards, dealerHand: table.dealer.hand.cards});
+		Play(table);
+	}
+
+	const RunDealer = (hand, soft17) => {
+		const hasAce = aceCheck(hand.cards[0]);
+		const cardTally = tally(hand.cards[0]);
+		cardTally > 21 ? hand.outcome = "BUST" : hand.outcome = cardTally;
+		if((cardTally <= 16) || (soft17 && hasAce && cardTally == 17)) {
+			hand.cards[0].push(deck.pop());
+			RunDealer(hand);
+		}
+		return hand;
+	}
 
 	const RunPlayer = (playingHand, dealerCard) => {
 		let cardTally = tally(playingHand.cards[0]);
@@ -71,77 +129,47 @@ const blackjackRules = () => {
 		return playingHand;
 	}
 
-	const RunDealer = (dealerCards, soft17) => {
-		const hasAce = aceCheck(dealerCards);
-		const cardTally = tally(dealerCards);
-		if((cardTally <= 16) || (soft17 && hasAce && cardTally == 17)) {
-			dealerCards.push(deck.pop());
-			RunDealer(dealerCards);
-		}
-
-		return dealerCards;
-	}
-
-	const AutoRun = (cards, dealerCard) => {
-		const hasAce = aceCheck(cards);
-		const cardTally = tally(cards);
-
-		if (cardTally > 21) { return cards; }
-
-		//if soft 7 or less
-		if(hasAce && cardTally <=7 ) {
-			cards.push(deck.pop());
-			AutoRun(cards, dealerCard);
-		}
-
-		//if soft 8 - eval against dealer card
-		if(hasAce && cardTally == 8 ) //todo this will depend on the face card the dealer has
-
-		//if soft 9 or higher, stand
-		if(hasAce && cardTally >= 9 ) return cards;
-
-		let hitOption = rules.filter(function (cards) { return cards.Hand.PlayerTotal == cardTally});
-		const shouldHit = hitOption[0].Hand.Hit.indexOf(dealerCard);
-		if (shouldHit >= 0) {
-			cards.push(deck.pop());
-			AutoRun(cards, dealerCard);
-		}
-
-		return cards;
-	};
-
-	const RunDeck = (player, dealer) => {
+	const RunTheDeck = (player, dealer) => {
 		let outcome = "";		// push, dealerwin, playerwin (WLP)
-
-		console.log(dealer[0][0].cardFace);
-
-		// Eval
-		let playerResult = RunPlayer(Table.players[0].hand, Table.dealer[0][0].cardValue);
-		let dealerResult = null;
+		let playerResult = RunPlayer(player.hand, dealer.hand.cards[0][0].cardValue);
+		let dealerResult = {};
 		if(playerResult.outcome == "BJ") {
-			//TODO check against the dealer hand, if no blackjack you win
-			outcome = "W";
-		} else if(playerResult.outcome == "BUST") outcome = "L";
-		else dealerResult = RunDealer(Table.dealer[0], false);
-
-		// console.log(playerResult);
-		// console.log(dealerResult);
-
-		// TODO clear out the hand arrays, the outcome + any bets
-		//TODO result builder
+			const sorted = dealer.hand.cards[0].sort(function(a,b){ return ((+b.cardValue==b.cardValue) && (+a.cardValue != a.cardValue)) || (a.cardValue - b.cardValue) }).reverse();
+			if(sorted[0].cardFace == "Ace" && sorted[1].cardValue == 10) outcome = "P"; //TODO insurance
+			else outcome = "W";
+		}
+		else if(playerResult.outcome == "BUST") outcome = "L";
+		else {
+			dealerResult = RunDealer(dealer.hand, false);
+			if(playerResult.outcome == dealerResult.outcome) outcome = "P";
+			else if(dealerResult.outcome == "BUST" || (dealerResult.outcome < playerResult.outcome)) outcome = "W";
+			else outcome = "L";
+		}
+		return outcome;
 	}
 
 	try {
 		//*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
-		var playerCards = [ deck.pop(), deck.pop()];
-		var dealerCards = [ deck.pop(), deck.pop()];
-		var Table = { players: [], shoeResult: [], dealer: [] }
-		var player1 = { name: "Ximeng Liu", cash: 0, hand: { cards: [], outcome: "", bet: 0} }
+		let Table = { players: [], shoeResult: [], dealer: {} }
+		let player1 = { name: "Ximeng Liu", cash: 0, hand: { cards: [], outcome: "", bet: 0} }
+		let dealer = { name: "Bollocks McBain", cash: 999999, hand: { cards: [], outcome: "" }}
+		var resultBuilder = [];
+		Table.dealer = dealer;									// Add dealer to the table
+		Table.players.push(player1);							// Add player to the table
 
-		Table.players.push(player1);				// Add player to the table
-		player1.hand.cards.push(playerCards);		// Deal first hand to the player
-		Table.dealer.push(dealerCards);				// Deal to the dealer
-		RunDeck(Table.players[0], Table.dealer);	//review the outcome
+		//*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
+
+		for (let index = 0; index < 2; index++) {
+			Play(Table);
+			fs.appendFileSync('result.json', JSON.stringify(resultBuilder), function (err) {
+				if (err) return console.log(err);
+			});
+
+		}
+
+
+
+
 		//*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 	} catch (e) {
 		console.log(e);
@@ -149,7 +177,3 @@ const blackjackRules = () => {
 }
 blackjackRules();
 module.exports = blackjackRules;
-
-
-// bugs
-// A/7 didnt hit?
