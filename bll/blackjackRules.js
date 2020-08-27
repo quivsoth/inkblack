@@ -58,6 +58,23 @@ const blackjackRules = () => {
 		return cards;
 	};
 
+	const EvaluateResult = (playingHand) => {
+		let outcome = "";		// push, dealerwin, playerwin (WLP)
+		let dealerResult = {};
+		if(playingHand.outcome == "BJ") {
+			const sorted = dealer.hand.cards[0].sort(function(a,b){ return ((+b.cardValue==b.cardValue) && (+a.cardValue != a.cardValue)) || (a.cardValue - b.cardValue) }).reverse();
+			if(sorted[0].cardFace == "Ace" && sorted[1].cardValue == 10) outcome = "P"; //TODO insurance
+			else outcome = "W";
+		}
+		else if(playingHand.outcome == "BUST") outcome = "L";
+		else {
+			dealerResult = RunDealer(dealer.hand, false);
+			if(playingHand.outcome == dealerResult.outcome) outcome = "P";
+			else if(dealerResult.outcome == "BUST" || (dealerResult.outcome < playingHand.outcome)) outcome = "W";
+			else outcome = "L";
+		}
+		return outcome;
+	}
 
 	///	Runs the deck of cards
 	/// Adds removes cards from players and dealer
@@ -68,20 +85,26 @@ const blackjackRules = () => {
 			deck = MultiShuffle();
 			return;
 		}
-
 		table.dealer.hand.cards = [];
 		table.dealer.hand.outcome = "";
 		table.dealer.hand.cards.push([deck.pop(), deck.pop()]);
 		// //TODO deal cards properly between players
 		table.players.forEach(player => {
-			player.hand[0].cards = [];
-			player.hand[0].outcome = "";
+			player.hand.forEach(hand => {
+				console.log(hand);
+				hand.cards = [];
+				hand.outcome = "";
+			});
+			//todo fix this to check the length of hands after a split
+			console.log(player.hand.length);
+			// player.hand[1].cards = [];
+			// player.hand[1].outcome = "";
 			player.hand[0].cards.push([deck.pop(), deck.pop()]);
 		});
+		RunTheDeck(table.players[0], table.dealer);	//review the outcome
 
-		var dealOutcome = RunTheDeck(table.players[0], table.dealer);	//review the outcome
-		// console.log(dealOutcome);
-		resultBuilder.push({outcome: dealOutcome, playerHand: table.players[0].hand[0].cards, dealerHand: table.dealer.hand.cards});
+		// resultBuilder.push({outcome: dealOutcome, playerHand: table.players[0].hand[0].cards, dealerHand: table.dealer.hand.cards});
+		resultBuilder.push({player: table.players[0].hand, dealerHand: table.dealer.hand.cards});
 		Play(table);
 	}
 
@@ -98,23 +121,8 @@ const blackjackRules = () => {
 
 	const RunPlayer = (playingHand, dealerCard) => {
 		let cardTally = tally(playingHand.cards[0]);
-
 		const sorted = playingHand.cards[0].sort(function(a,b){ return ((+b.cardValue==b.cardValue) && (+a.cardValue != a.cardValue)) || (a.cardValue - b.cardValue) }).reverse();
-		console.log( sorted);
-
-		if (playingHand.outcome == "ISSPLIT") {
-			console.log('--');
-			console.log(playingHand.cards);
-console.log('--');
-			console.log( sorted);
-
-		}
-
 		const handCode = sorted[0].cardValue + "," + sorted[1].cardValue;
-
-
-
-
 
 		if(handCode == 'A,10') {
 			playingHand.outcome = "BJ";
@@ -147,55 +155,24 @@ console.log('--');
 			return playingHand;
 		}
 		playingHand.outcome = tally(playingHand.cards[0]);
-		// playingHand.outcome = "SPLIT";
-
 		return playingHand;
 	}
 
 	///	Returns the cards hit/split/double based on the cards dealt and what the dealer has
 	///	Evaluates the outcome - if required dealer runs
 	const RunTheDeck = (player, dealer) => {
-		let outcome = "";		// push, dealerwin, playerwin (WLP)
 		let playerResult = RunPlayer(player.hand[0], dealer.hand.cards[0][0].cardValue);
-
-	//*-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0
 		if (playerResult.outcome == "SPLIT") {
-			console.log("SPLIT");
-			player.hand[0].outcome="ISSPLIT";
-			player.hand[1] = { cards: [], outcome: "ISSPLIT", bet: 1200 };
+			console.log("--SPLIT--");
+			player.hand[1] = { cards: [], outcome: "", bet: 1200 };
 			player.hand[1].cards = [];
 			player.hand[1].outcome = "";
 			player.hand[1].cards.push([player.hand[0].cards[0].pop(), deck.pop()]);
-			player.hand[0].cards.push([deck.pop()]);
-
-
-			player.hand.forEach(hand => {
-				const result = RunPlayer(hand, dealer.hand.cards[0][0].cardValue);
-				// console.log(hand);
-			});
-		}
-	// //*-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0
-
-
-
-
-
-		let dealerResult = {};
-		if(playerResult.outcome == "BJ") {
-			const sorted = dealer.hand.cards[0].sort(function(a,b){ return ((+b.cardValue==b.cardValue) && (+a.cardValue != a.cardValue)) || (a.cardValue - b.cardValue) }).reverse();
-			if(sorted[0].cardFace == "Ace" && sorted[1].cardValue == 10) outcome = "P"; //TODO insurance
-			else outcome = "W";
-		}
-		else if(playerResult.outcome == "BUST") outcome = "L";
-		else {
-			dealerResult = RunDealer(dealer.hand, false);
-			if(playerResult.outcome == dealerResult.outcome) outcome = "P";
-			else if(dealerResult.outcome == "BUST" || (dealerResult.outcome < playerResult.outcome)) outcome = "W";
-			else outcome = "L";
-		}
-		return outcome;
+			player.hand[0].cards[0].push(deck.pop());
+			player.hand.forEach(hand => { EvaluateResult(RunPlayer(hand, dealer.hand.cards[0][0].cardValue))});
+		} else EvaluateResult(playerResult);
+		return;
 	}
-
 	try {
 		//*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 		var Table = { players: [], shoeResult: [], dealer: {} }
@@ -206,7 +183,6 @@ console.log('--');
 		Table.dealer = dealer;									// Add dealer to the table
 		Table.players.push(player1);							// Add player to the table
 		var logger = fs.createWriteStream('result.txt', {flags: 'a' }); // 'a' means appending (old data will be preserved)
-
 		//*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 		// for (let j = 0; j < 20; j++) {
 		// 	logger = fs.createWriteStream('result' + j + '.json.txt', {flags: 'a' });
@@ -215,6 +191,8 @@ console.log('--');
 		// 	resultBuilder = [];
 		// }
 		Play(Table);
+		logger.write(JSON.stringify(resultBuilder));
+		resultBuilder = [];
 		//*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-
 	} catch (e) {
 		console.log(e);
